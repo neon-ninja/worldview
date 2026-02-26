@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorldView — Intelligence Surveillance Platform</title>
+  <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      color: #00ff41;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    #cesiumContainer {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* ── Loading screen ─────────────────────────────── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: opacity 0.8s;
+    }
+    #loading h1 {
+      font-size: 42px;
+      letter-spacing: 10px;
+      color: #00ff41;
+      text-shadow: 0 0 30px #00ff41, 0 0 60px #00ff4166;
+      margin-bottom: 8px;
+    }
+    #loading h1 span { color: #ff3131; text-shadow: 0 0 20px #ff3131; }
+    #loading-sub {
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: #006600;
+      margin-bottom: 32px;
+    }
+    #loading-msg {
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #005500;
+      margin-bottom: 12px;
+      height: 16px;
+    }
+    #loading-bar-wrap {
+      width: 320px;
+      height: 2px;
+      background: #001a00;
+    }
+    #loading-bar {
+      height: 100%;
+      width: 0%;
+      background: #00ff41;
+      box-shadow: 0 0 8px #00ff41;
+      transition: width 0.4s ease;
+    }
+    .blink { animation: blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Header ─────────────────────────────────────── */
+    #header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 48px;
+      background: rgba(0,0,0,0.88);
+      border-bottom: 1px solid #00300d;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      z-index: 50;
+    }
+    #logo {
+      font-size: 17px;
+      font-weight: bold;
+      letter-spacing: 5px;
+      color: #00ff41;
+      text-shadow: 0 0 12px #00ff41;
+      flex-shrink: 0;
+    }
+    #logo span { color: #ff3131; text-shadow: 0 0 10px #ff3131; }
+    .sep { width: 1px; height: 26px; background: #002200; margin: 0 4px; }
+
+    /* Mode buttons */
+    .mbtn {
+      padding: 4px 11px;
+      border: 1px solid currentColor;
+      background: transparent;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .mbtn:hover { background: rgba(255,255,255,0.08); }
+    .mbtn.active { background: currentColor !important; }
+    .mbtn.active span { color: #000 !important; }
+    .mbtn span { color: currentColor; }
+    .mbtn-normal { color: #00ff41; }
+    .mbtn-nvg    { color: #39ff14; }
+    .mbtn-flir   { color: #ff7700; }
+    .mbtn-crt    { color: #b8ffb8; }
+    .mbtn-anime  { color: #ff88ff; }
+
+    #god-btn {
+      margin-left: auto;
+      padding: 4px 14px;
+      border: 1px solid #ff3131;
+      background: transparent;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #ff3131;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+      flex-shrink: 0;
+    }
+    #god-btn:hover { background: rgba(255,49,49,0.15); }
+    #god-btn.active {
+      background: #ff3131;
+      color: #000;
+      box-shadow: 0 0 14px #ff313188;
+    }
+
+    #utc { font-size: 10px; letter-spacing: 1px; color: #005500; flex-shrink: 0; margin-left: 10px; }
+
+    /* ── Left panel ──────────────────────────────────── */
+    #left {
+      position: absolute;
+      top: 48px; left: 0;
+      width: 240px;
+      bottom: 28px;
+      background: rgba(0,0,0,0.82);
+      border-right: 1px solid #001a00;
+      display: flex;
+      flex-direction: column;
+      z-index: 40;
+    }
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #001a00;
+    }
+    .tab {
+      flex: 1;
+      padding: 7px 4px;
+      background: transparent;
+      border: none;
+      border-right: 1px solid #001a00;
+      font-family: inherit;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: #004400;
+      cursor: pointer;
+    }
+    .tab:last-child { border-right: none; }
+    .tab.active { color: #00ff41; background: rgba(0,255,65,0.06); }
+    .panel-body { flex: 1; overflow-y: auto; padding: 6px; }
+
+    /* Satellite / aircraft items */
+    .sat-group { font-size: 9px; letter-spacing: 3px; color: #002800; padding: 8px 4px 3px; border-bottom: 1px solid #001100; margin-bottom: 3px; }
+    .sat-item, .ac-item {
+      padding: 5px 7px;
+      margin-bottom: 2px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .sat-item:hover { border-color: #00ff41; background: rgba(0,255,65,0.07); }
+    .sat-item.sel  { border-color: #00ff41; background: rgba(0,255,65,0.14); box-shadow: 0 0 6px rgba(0,255,65,0.2); }
+    .ac-item:hover { border-color: #ff9900; background: rgba(255,153,0,0.07); }
+    .item-name { font-size: 11px; }
+    .item-sub  { font-size: 9px; color: #004400; margin-top: 1px; }
+
+    /* Scrollbar */
+    .panel-body::-webkit-scrollbar { width: 3px; }
+    .panel-body::-webkit-scrollbar-track { background: #001100; }
+    .panel-body::-webkit-scrollbar-thumb { background: #004400; }
+
+    /* ── Right panel ─────────────────────────────────── */
+    #right {
+      position: absolute;
+      top: 48px; right: 0;
+      width: 265px;
+      bottom: 28px;
+      background: rgba(0,0,0,0.82);
+      border-left: 1px solid #001a00;
+      padding: 10px;
+      overflow-y: auto;
+      z-index: 40;
+    }
+    #right::-webkit-scrollbar { width: 3px; }
+    #right::-webkit-scrollbar-track { background: #001100; }
+    #right::-webkit-scrollbar-thumb { background: #004400; }
+    .panel-title { font-size: 9px; letter-spacing: 3px; color: #004400; border-bottom: 1px solid #001a00; padding-bottom: 5px; margin-bottom: 8px; }
+    .info-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 5px; }
+    .info-label { color: #005500; letter-spacing: 1px; }
+    .info-val { color: #00ff41; text-align: right; }
+    #entity-name { font-size: 13px; letter-spacing: 2px; color: #00ff41; text-shadow: 0 0 8px #00ff41; margin-bottom: 10px; word-break: break-all; }
+    .track-btn {
+      width: 100%; margin-top: 10px; padding: 7px;
+      background: transparent; border: 1px solid #00ff41;
+      color: #00ff41; font-family: inherit; font-size: 10px;
+      letter-spacing: 2px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .track-btn:hover { background: rgba(0,255,65,0.12); }
+    .track-btn.active { background: #00ff41; color: #000; }
+
+    /* ── Status bar ──────────────────────────────────── */
+    #status {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 28px;
+      background: rgba(0,0,0,0.88);
+      border-top: 1px solid #001a00;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 20px;
+      font-size: 9px;
+      letter-spacing: 1px;
+      z-index: 50;
+    }
+    .st { color: #003300; }
+    .st span { color: #00cc33; }
+
+    /* ── Targeting reticle ───────────────────────────── */
+    #reticle {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 90px; height: 90px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s;
+      z-index: 45;
+    }
+    #reticle.show { opacity: 1; }
+    .ret-ring {
+      position: absolute; inset: 0;
+      border: 1px solid rgba(0,255,65,0.7);
+      border-radius: 50%;
+      animation: rspin 10s linear infinite;
+    }
+    .ret-ch { position: absolute; background: rgba(0,255,65,0.5); }
+    .ret-h { top: 50%; left: 12px; right: 12px; height: 1px; transform: translateY(-50%); }
+    .ret-v { left: 50%; top: 12px; bottom: 12px; width: 1px; transform: translateX(-50%); }
+    .ret-c { position: absolute; width: 12px; height: 12px; }
+    .ret-c.tl { top:0;left:0; border-top:2px solid #00ff41; border-left:2px solid #00ff41; }
+    .ret-c.tr { top:0;right:0; border-top:2px solid #00ff41; border-right:2px solid #00ff41; }
+    .ret-c.bl { bottom:0;left:0; border-bottom:2px solid #00ff41; border-left:2px solid #00ff41; }
+    .ret-c.br { bottom:0;right:0; border-bottom:2px solid #00ff41; border-right:2px solid #00ff41; }
+    @keyframes rspin { to { transform: rotate(360deg); } }
+
+    /* ── Corner brackets ─────────────────────────────── */
+    .cbracket {
+      position: absolute; width: 24px; height: 24px;
+      opacity: 0.35; z-index: 45; pointer-events: none;
+    }
+    .cbracket.tl { top:56px; left:248px; border-top:1px solid #00ff41; border-left:1px solid #00ff41; }
+    .cbracket.tr { top:56px; right:273px; border-top:1px solid #00ff41; border-right:1px solid #00ff41; }
+    .cbracket.bl { bottom:36px; left:248px; border-bottom:1px solid #00ff41; border-left:1px solid #00ff41; }
+    .cbracket.br { bottom:36px; right:273px; border-bottom:1px solid #00ff41; border-right:1px solid #00ff41; }
+
+    /* ── Mode flash label ────────────────────────────── */
+    #mode-flash {
+      position: absolute;
+      top: 60px; left: 50%;
+      transform: translateX(-50%);
+      padding: 3px 14px;
+      border: 1px solid currentColor;
+      font-size: 10px; letter-spacing: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 45;
+    }
+    #mode-flash.show { opacity: 1; }
+
+    /* ── NVG vignette overlay ────────────────────────── */
+    #nvg-vignette {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.95) 100%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 6;
+    }
+
+    /* Empty state */
+    .empty { color: #003300; font-size: 10px; text-align: center; padding: 28px 8px; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Loading ──────────────────────────────── -->
+<div id="loading">
+  <h1>WORLD<span>VIEW</span></h1>
+  <div id="loading-sub">INTELLIGENCE SURVEILLANCE PLATFORM</div>
+  <div id="loading-msg">INITIALIZING<span class="blink">_</span></div>
+  <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+</div>
+
+<!-- ── Globe ────────────────────────────────── -->
+<div id="cesiumContainer"></div>
+
+<!-- NVG vignette -->
+<div id="nvg-vignette"></div>
+
+<!-- ── Header ───────────────────────────────── -->
+<div id="header">
+  <div id="logo">WORLD<span>VIEW</span></div>
+  <div class="sep"></div>
+  <button class="mbtn mbtn-normal active" onclick="setMode('normal')"><span>NORMAL</span></button>
+  <button class="mbtn mbtn-nvg"    onclick="setMode('nvg')"><span>NVG</span></button>
+  <button class="mbtn mbtn-flir"   onclick="setMode('flir')"><span>FLIR</span></button>
+  <button class="mbtn mbtn-crt"    onclick="setMode('crt')"><span>CRT</span></button>
+  <button class="mbtn mbtn-anime"  onclick="setMode('anime')"><span>ANIME</span></button>
+  <button id="god-btn" onclick="toggleGodMode()">⬡ GOD MODE</button>
+  <div id="utc">UTC 00:00:00</div>
+</div>
+
+<!-- ── Left panel ───────────────────────────── -->
+<div id="left">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('sats',this)">SATELLITES</button>
+    <button class="tab" onclick="switchTab('acft',this)">AIRCRAFT</button>
+  </div>
+  <div class="panel-body">
+    <div id="tab-sats">
+      <div class="empty">LOADING TLE DATA<span class="blink">_</span></div>
+    </div>
+    <div id="tab-acft" style="display:none">
+      <div class="empty">QUERYING OPENSKY<span class="blink">_</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Right panel ──────────────────────────── -->
+<div id="right">
+  <div class="panel-title">◉ TARGET LOCK</div>
+  <div id="entity-info">
+    <div class="empty">SELECT A SATELLITE<br>OR AIRCRAFT<br>TO TRACK</div>
+  </div>
+</div>
+
+<!-- Corner brackets -->
+<div class="cbracket tl"></div>
+<div class="cbracket tr"></div>
+<div class="cbracket bl"></div>
+<div class="cbracket br"></div>
+
+<!-- Targeting reticle -->
+<div id="reticle">
+  <div class="ret-ring"></div>
+  <div class="ret-ch ret-h"></div>
+  <div class="ret-ch ret-v"></div>
+  <div class="ret-c tl"></div>
+  <div class="ret-c tr"></div>
+  <div class="ret-c bl"></div>
+  <div class="ret-c br"></div>
+</div>
+
+<!-- Mode flash label -->
+<div id="mode-flash" style="color:#00ff41">NORMAL</div>
+
+<!-- ── Status bar ────────────────────────────── -->
+<div id="status">
+  <div class="st">SATS <span id="st-sats">0</span></div>
+  <div class="st">ACFT <span id="st-acft">0</span></div>
+  <div class="st">MODE <span id="st-mode">NORMAL</span></div>
+  <div class="st">LAT <span id="st-lat">--</span></div>
+  <div class="st">LON <span id="st-lon">--</span></div>
+  <div class="st">ALT <span id="st-alt">--</span></div>
+</div>
+
+<!-- ── Scripts ───────────────────────────────── -->
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.3/satellite.min.js"></script>
+<script>
+'use strict';
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let viewer;
+let sats = [];           // parsed satellite records
+let acft = [];           // aircraft states
+let selSat = null;       // selected satellite id
+let godMode = false;
+let tracking = false;    // camera locked to entity
+let orbitPolyline = null;
+let satEntities = {};    // norad id → cesium entity
+let acftEntities = {};   // icao → cesium entity
+let postProcs = {};      // mode → PostProcessStage
+let currentMode = 'normal';
+let modeFlashTimer = null;
+
+// ─── Loading helpers ──────────────────────────────────────────────────────────
+function progress(pct, msg) {
+  document.getElementById('loading-bar').style.width = pct + '%';
+  document.getElementById('loading-msg').innerHTML = msg + '<span class="blink">_</span>';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  progress(8, 'LOADING CESIUM ENGINE');
+
+  // Suppress Cesium Ion request
+  Cesium.Ion.defaultAccessToken = '';
+
+  const creditDiv = document.createElement('div');
+  creditDiv.style.display = 'none';
+
+  viewer = new Cesium.Viewer('cesiumContainer', {
+    imageryProvider: new Cesium.UrlTemplateImageryProvider({
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      minimumLevel: 0,
+      maximumLevel: 19,
+      credit: '© OpenStreetMap contributors'
+    }),
+    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+    creditContainer: creditDiv,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    baseLayerPicker: false,
+    navigationHelpButton: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    vrButton: false,
+    infoBox: false,
+    selectionIndicator: false
+  });
+
+  // Nice globe settings
+  viewer.scene.globe.enableLighting = true;
+  viewer.scene.skyAtmosphere.show = true;
+  viewer.scene.fog.enabled = true;
+  viewer.scene.globe.showGroundAtmosphere = true;
+  viewer.scene.globe.atmosphereLightIntensity = 10.0;
+  viewer.scene.backgroundColor = Cesium.Color.BLACK;
+
+  // Initial camera
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(0, 20, 22000000),
+    duration: 0
+  });
+
+  // Track camera position in status bar
+  viewer.scene.preRender.addEventListener(updateCamStatus);
+
+  progress(30, 'ACQUIRING TLE DATA FROM CELESTRAK');
+  await loadSatellites();
+
+  progress(60, 'COMPILING SURVEILLANCE SHADERS');
+  setupShaders();
+
+  progress(75, 'CONNECTING TO OPENSKY NETWORK');
+  loadAircraft(); // fire and forget
+
+  progress(90, 'ARMING SYSTEMS');
+  setInterval(propagateSats, 5000);
+  setInterval(updateClock, 1000);
+  setInterval(loadAircraft, 90000);
+  propagateSats();
+
+  progress(100, 'SYSTEM ONLINE');
+  setTimeout(() => {
+    const el = document.getElementById('loading');
+    el.style.opacity = '0';
+    setTimeout(() => el.style.display = 'none', 900);
+  }, 600);
+}
+
+// ─── TLE / Satellite loading ───────────────────────────────────────────────────
+const TLE_GROUPS = [
+  { label: 'STATIONS',    url: 'https://celestrak.org/pub/TLE/stations.txt'  },
+  { label: 'VISUAL',      url: 'https://celestrak.org/pub/TLE/visual.txt'    },
+  { label: 'WEATHER',     url: 'https://celestrak.org/pub/TLE/weather.txt'   },
+  { label: 'NOAA',        url: 'https://celestrak.org/pub/TLE/noaa.txt'      },
+  { label: 'RESOURCE',    url: 'https://celestrak.org/pub/TLE/resource.txt'  },
+  { label: 'NAVIGATION',  url: 'https://celestrak.org/pub/TLE/gnss.txt'      },
+  { label: 'MILITARY',    url: 'https://celestrak.org/pub/TLE/military.txt'  },
+];
+
+async function loadSatellites() {
+  sats = [];
+  const seenIds = new Set();
+
+  for (const grp of TLE_GROUPS) {
+    try {
+      const r = await fetch(grp.url, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const text = await r.text();
+      const parsed = parseTLE(text, grp.label);
+      for (const s of parsed) {
+        if (!seenIds.has(s.id)) { seenIds.add(s.id); sats.push(s); }
+      }
+    } catch (e) {
+      console.warn('TLE fetch failed:', grp.url, e.message);
+      // Individual group failures are non-fatal; remaining groups still load
+    }
+  }
+
+  if (sats.length === 0) {
+    console.warn('All TLE sources unavailable — using hardcoded fallback data');
+    sats = fallbackSatellites();
+    // Inform the user that live data could not be retrieved
+    document.getElementById('tab-sats').insertAdjacentHTML('afterbegin',
+      '<div style="font-size:9px;color:#664400;padding:4px 6px;border:1px solid #332200;margin-bottom:6px">' +
+      '⚠ CELESTRAK UNREACHABLE — USING CACHED TLE DATA</div>');
+  }
+
+  buildSatEntities();
+  renderSatList();
+  document.getElementById('st-sats').textContent = sats.length;
+}
+
+function parseTLE(text, group) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const result = [];
+  let i = 0;
+  while (i < lines.length) {
+    const a = lines[i], b = lines[i + 1], c = lines[i + 2];
+    if (b && c && !a.startsWith('1 ') && !a.startsWith('2 ') && b.startsWith('1 ') && c.startsWith('2 ')) {
+      try {
+        const satrec = satellite.twoline2satrec(b, c);
+        if (satrec && satrec.error === 0) {
+          result.push({
+            name: a.replace(/^0 /, '').trim(),
+            line1: b, line2: c, satrec, group,
+            inclination: parseFloat(c.substring(8, 16).trim()) || 0,
+            id: satrec.satnum,
+            lat: null, lon: null, altKm: null, vel: null
+          });
+        }
+      } catch (_) {}
+      i += 3;
+    } else {
+      i++;
+    }
+  }
+  return result;
+}
+
+function fallbackSatellites() {
+  const raw = `ISS (ZARYA)
+1 25544U 98067A   24060.50000000  .00016717  00000-0  10270-3 0  9994
+2 25544  51.6416 271.9400 0001234  79.9900 280.1300 15.50000000468879
+TIANGONG (CSS)
+1 48274U 21035A   24060.50000000  .00015823  00000-0  18152-3 0  9999
+2 48274  41.4748  23.7741 0006080  26.5413 333.6020 15.61479440154219
+HUBBLE SPACE TELESCOPE
+1 20580U 90037B   24060.50000000  .00001511  00000-0  73380-4 0  9995
+2 20580  28.4697  94.3547 0002576 116.2810 243.8560 15.09289423505688
+TERRA
+1 25994U 99068A   24060.50000000  .00000028  00000-0  36220-4 0  9994
+2 25994  98.2000 112.4600 0001241  82.7878 277.3451 14.57118200274839
+AQUA
+1 27424U 02022A   24060.50000000  .00000138  00000-0  74831-4 0  9992
+2 27424  98.2196 116.1700 0001447  79.5050 280.6280 14.57119432163434
+LANDSAT 8
+1 39084U 13008A   24060.50000000 -.00000003  00000-0  47030-5 0  9997
+2 39084  98.2199 110.4800 0001308  75.1940 285.0140 14.57102456575443
+NOAA 19
+1 33591U 09005A   24060.50000000 -.00000013  00000-0  43167-4 0  9993
+2 33591  99.1963 115.6000 0013992  90.3617 269.9001 14.12305960771073
+JASON-3
+1 41240U 16002A   24060.50000000  .00000064  00000-0  32560-4 0  9993
+2 41240  66.0400  30.5600 0009021  67.7000 292.5000 12.80933462352673`;
+  return parseTLE(raw, 'KNOWN');
+}
+
+// ─── Cesium entities ──────────────────────────────────────────────────────────
+const GROUP_COLORS = {
+  STATIONS:   '#00ff41',
+  VISUAL:     '#ffff00',
+  WEATHER:    '#00ccff',
+  NOAA:       '#00aaff',
+  RESOURCE:   '#aaffaa',
+  NAVIGATION: '#ff9900',
+  MILITARY:   '#ff3333',
+  KNOWN:      '#00ff41',
+  default:    '#00ff41'
+};
+
+function satColor(s) {
+  const hex = GROUP_COLORS[s.group] || GROUP_COLORS.default;
+  return Cesium.Color.fromCssColorString(hex);
+}
+
+function buildSatEntities() {
+  sats.forEach(s => {
+    const col = satColor(s);
+    const entity = viewer.entities.add({
+      id: 'sat-' + s.id,
+      point: {
+        pixelSize: 4,
+        color: col,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 1,
+        scaleByDistance: new Cesium.NearFarScalar(1e6, 1.5, 5e7, 0.6)
+      },
+      label: {
+        text: s.name,
+        font: '10px Courier New',
+        fillColor: col,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(10, -6),
+        translucencyByDistance: new Cesium.NearFarScalar(8e5, 1.0, 8e7, 0.0),
+        show: false
+      }
+    });
+    satEntities[s.id] = entity;
+    s.entity = entity;
+  });
+}
+
+// ─── Satellite propagation ────────────────────────────────────────────────────
+function propagateSats() {
+  const now = new Date();
+  const gmst = satellite.gstime(now);
+  sats.forEach(s => {
+    try {
+      const pv = satellite.propagate(s.satrec, now);
+      if (!pv || !pv.position) return;
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      s.lat = satellite.degreesLat(geo.latitude);
+      s.lon = satellite.degreesLong(geo.longitude);
+      s.altKm = geo.height;
+      s.vel = pv.velocity
+        ? Math.sqrt(pv.velocity.x ** 2 + pv.velocity.y ** 2 + pv.velocity.z ** 2)
+        : null;
+      if (s.entity) {
+        s.entity.position = Cesium.Cartesian3.fromDegrees(s.lon, s.lat, s.altKm * 1000);
+      }
+    } catch (_) {}
+  });
+  // Refresh info panel if a satellite is selected
+  if (selSat !== null) {
+    const s = sats.find(x => x.id === selSat);
+    if (s) renderEntityInfo(s);
+  }
+}
+
+// ─── Satellite list UI ────────────────────────────────────────────────────────
+function renderSatList() {
+  const groups = {};
+  sats.forEach(s => { (groups[s.group] = groups[s.group] || []).push(s); });
+
+  let html = '';
+  for (const [g, items] of Object.entries(groups)) {
+    const col = GROUP_COLORS[g] || GROUP_COLORS.default;
+    html += `<div class="sat-group" style="color:${col}aa">${g} (${items.length})</div>`;
+    items.slice(0, MAX_SATS_PER_GROUP).forEach(s => {  // cap per group to keep panel scrollable
+      html += `<div class="sat-item" id="si-${s.id}" onclick="selectSat(${s.id})">
+        <div class="item-name" style="color:${col}">${s.name}</div>
+        <div class="item-sub">INC ${s.inclination.toFixed(1)}° · ${s.group}</div>
+      </div>`;
+    });
+  }
+  document.getElementById('tab-sats').innerHTML = html || '<div class="empty">NO DATA</div>';
+}
+
+// ─── Satellite selection ──────────────────────────────────────────────────────
+function selectSat(id) {
+  // Deselect previous
+  if (selSat !== null) {
+    const prev = sats.find(s => s.id === selSat);
+    if (prev && prev.entity) {
+      prev.entity.point.pixelSize = godMode ? 6 : 4;
+      prev.entity.label.show = godMode;
+    }
+    const prevEl = document.getElementById('si-' + selSat);
+    if (prevEl) prevEl.classList.remove('sel');
+    clearOrbit();
+    stopTracking();
+  }
+
+  selSat = id;
+  const s = sats.find(x => x.id === id);
+  if (!s) return;
+
+  // Highlight entity
+  if (s.entity) {
+    s.entity.point.pixelSize = 10;
+    s.entity.label.show = true;
+  }
+
+  const el = document.getElementById('si-' + id);
+  if (el) { el.classList.add('sel'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+
+  document.getElementById('reticle').classList.add('show');
+
+  // Fly to satellite
+  if (s.lat !== null) {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, s.altKm * 1000 + 2500000),
+      duration: 2
+    });
+  }
+
+  drawOrbit(s);
+  renderEntityInfo(s);
+}
+
+function drawOrbit(s) {
+  clearOrbit();
+  const now = new Date();
+  const periodMin = (2 * Math.PI) / s.satrec.no;
+  const steps = 120;
+  const positions = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = new Date(now.getTime() + (i / steps) * periodMin * 60000);
+    try {
+      const pv = satellite.propagate(s.satrec, t);
+      if (!pv || !pv.position) continue;
+      const gmst = satellite.gstime(t);
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      positions.push(Cesium.Cartesian3.fromDegrees(
+        satellite.degreesLong(geo.longitude),
+        satellite.degreesLat(geo.latitude),
+        geo.height * 1000
+      ));
+    } catch (_) {}
+  }
+  if (positions.length > 1) {
+    orbitPolyline = viewer.entities.add({
+      polyline: {
+        positions,
+        width: 1.5,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: Cesium.Color.fromCssColorString('#00ff41').withAlpha(0.55),
+          dashLength: 24
+        }),
+        clampToGround: false
+      }
+    });
+  }
+}
+
+function clearOrbit() {
+  if (orbitPolyline) { viewer.entities.remove(orbitPolyline); orbitPolyline = null; }
+}
+
+function renderEntityInfo(s) {
+  const color = GROUP_COLORS[s.group] || GROUP_COLORS.default;
+  const altStr = s.altKm !== null ? s.altKm.toFixed(1) + ' km' : '--';
+  const velStr = s.vel !== null ? s.vel.toFixed(2) + ' km/s' : '--';
+  const latStr = s.lat !== null ? s.lat.toFixed(4) + '°' : '--';
+  const lonStr = s.lon !== null ? s.lon.toFixed(4) + '°' : '--';
+
+  document.getElementById('entity-info').innerHTML = `
+    <div id="entity-name" style="color:${color};text-shadow:0 0 8px ${color}">${s.name}</div>
+    <div class="info-row"><span class="info-label">GROUP</span><span class="info-val" style="color:${color}">${s.group}</span></div>
+    <div class="info-row"><span class="info-label">NORAD ID</span><span class="info-val">${s.id}</span></div>
+    <div class="info-row"><span class="info-label">LATITUDE</span><span class="info-val">${latStr}</span></div>
+    <div class="info-row"><span class="info-label">LONGITUDE</span><span class="info-val">${lonStr}</span></div>
+    <div class="info-row"><span class="info-label">ALTITUDE</span><span class="info-val">${altStr}</span></div>
+    <div class="info-row"><span class="info-label">VELOCITY</span><span class="info-val">${velStr}</span></div>
+    <div class="info-row"><span class="info-label">INCLINATION</span><span class="info-val">${s.inclination.toFixed(2)}°</span></div>
+    <div class="info-row"><span class="info-label">PERIOD</span><span class="info-val">${((2*Math.PI)/s.satrec.no).toFixed(1)} min</span></div>
+    <div style="margin-top:10px;padding:7px;border:1px solid #002200;">
+      <div style="font-size:9px;color:#004400;letter-spacing:2px;margin-bottom:4px">ORBIT TRACK</div>
+      <div style="font-size:9px;color:#003300">One full orbit plotted on globe</div>
+    </div>
+    <button class="track-btn" id="lock-btn" onclick="toggleTracking(${s.id})">LOCK CAMERA</button>
+  `;
+}
+
+// ─── Camera tracking ──────────────────────────────────────────────────────────
+function toggleTracking(id) {
+  const s = sats.find(x => x.id === id);
+  if (!s || !s.entity) return;
+  if (tracking) {
+    stopTracking();
+  } else {
+    viewer.trackedEntity = s.entity;
+    tracking = true;
+    const btn = document.getElementById('lock-btn');
+    if (btn) btn.classList.add('active');
+  }
+}
+
+function stopTracking() {
+  if (tracking) {
+    viewer.trackedEntity = undefined;
+    tracking = false;
+    const btn = document.getElementById('lock-btn');
+    if (btn) btn.classList.remove('active');
+  }
+}
+
+// OpenSky Network API column indices (see https://openskynetwork.github.io/opensky-api/rest.html)
+const OS_ICAO = 0, OS_CALLSIGN = 1, OS_LON = 5, OS_LAT = 6, OS_ALT_BARO = 7,
+      OS_ON_GROUND = 8, OS_VELOCITY = 9, OS_HDG = 10;
+
+// Max items to render per panel for UI performance
+const MAX_SATS_PER_GROUP = 40;
+const MAX_ACFT_LIST = 80;
+const MAX_ACFT_ENTITIES = 300;
+
+// ─── Aircraft ─────────────────────────────────────────────────────────────────
+async function loadAircraft() {
+  try {
+    const r = await fetch('https://opensky-network.org/api/states/all', {
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data || !data.states) return;
+
+    acft = data.states
+      .filter(s => s[OS_LON] != null && s[OS_LAT] != null && !s[OS_ON_GROUND])
+      .slice(0, MAX_ACFT_ENTITIES) // cap entity count for render performance
+      .map(s => ({
+        icao: s[OS_ICAO],
+        callsign: (s[OS_CALLSIGN] || s[OS_ICAO] || '').trim(),
+        lon: s[OS_LON], lat: s[OS_LAT],
+        altM: s[OS_ALT_BARO] || 0,
+        vel: s[OS_VELOCITY] || 0,
+        hdg: s[OS_HDG] || 0
+      }));
+
+    rebuildAcftEntities();
+    renderAcftList();
+    document.getElementById('st-acft').textContent = acft.length;
+  } catch (e) {
+    const reason = e.name === 'TimeoutError' ? 'Request timed out' : e.message;
+    console.warn('OpenSky unavailable:', reason);
+    document.getElementById('tab-acft').innerHTML =
+      `<div class="empty">OPENSKY FEED UNAVAILABLE<br><small style="font-size:9px;color:#003300">${reason}</small></div>`;
+  }
+}
+
+function rebuildAcftEntities() {
+  Object.values(acftEntities).forEach(e => viewer.entities.remove(e));
+  acftEntities = {};
+  acft.forEach(a => {
+    const e = viewer.entities.add({
+      id: 'ac-' + a.icao,
+      position: Cesium.Cartesian3.fromDegrees(a.lon, a.lat, a.altM || 8000),
+      point: {
+        pixelSize: 3,
+        color: Cesium.Color.fromCssColorString('#ff9900'),
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 1,
+        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.5, 3e7, 0.3)
+      }
+    });
+    acftEntities[a.icao] = e;
+    a.entity = e;
+  });
+}
+
+function renderAcftList() {
+  if (acft.length === 0) {
+    document.getElementById('tab-acft').innerHTML = '<div class="empty">NO AIRCRAFT DETECTED</div>';
+    return;
+  }
+  const html = acft.slice(0, MAX_ACFT_LIST).map(a => `
+    <div class="ac-item">
+      <div class="item-name" style="color:#ff9900">${a.callsign || a.icao}</div>
+      <div class="item-sub">ALT ${Math.round(a.altM)}m · ${Math.round(a.vel)}m/s · HDG ${Math.round(a.hdg)}°</div>
+    </div>`).join('');
+  document.getElementById('tab-acft').innerHTML = html;
+}
+
+// ─── Post-process shaders ─────────────────────────────────────────────────────
+function setupShaders() {
+  // Night Vision
+  postProcs.nvg = new Cesium.PostProcessStage({
+    name: 'wv_nvg',
+    fragmentShader: `
+      uniform sampler2D colorTexture;
+      in vec2 v_textureCoordinates;
+      void main() {
+        vec4 c = texture(colorTexture, v_textureCoordinates);
+        float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        float scan = sin(v_textureCoordinates.y * 1400.0) * 0.025;
+        float n = fract(sin(dot(v_textureCoordinates * 800.0, vec2(12.9898,78.233))) * 43758.5453) * 0.04;
+        lum = clamp(lum * 2.2 - scan + n, 0.0, 1.0);
+        out_FragColor = vec4(lum * 0.07, lum * 0.95, lum * 0.12, c.a);
+      }`
+  });
+
+  // FLIR Thermal
+  postProcs.flir = new Cesium.PostProcessStage({
+    name: 'wv_flir',
+    fragmentShader: `
+      uniform sampler2D colorTexture;
+      in vec2 v_textureCoordinates;
+      void main() {
+        vec4 c = texture(colorTexture, v_textureCoordinates);
+        float h = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        h = pow(h, 0.6);
+        vec3 t;
+        if      (h < 0.2) t = mix(vec3(0.0,0.0,0.0),   vec3(0.0,0.0,0.55),   h * 5.0);
+        else if (h < 0.4) t = mix(vec3(0.0,0.0,0.55),  vec3(0.0,0.55,0.85),  (h-0.2)*5.0);
+        else if (h < 0.6) t = mix(vec3(0.0,0.55,0.85), vec3(0.9,0.05,0.05),  (h-0.4)*5.0);
+        else if (h < 0.8) t = mix(vec3(0.9,0.05,0.05), vec3(1.0,0.85,0.0),   (h-0.6)*5.0);
+        else              t = mix(vec3(1.0,0.85,0.0),   vec3(1.0,1.0,1.0),    (h-0.8)*5.0);
+        out_FragColor = vec4(t, c.a);
+      }`
+  });
+
+  // CRT Display
+  postProcs.crt = new Cesium.PostProcessStage({
+    name: 'wv_crt',
+    fragmentShader: `
+      uniform sampler2D colorTexture;
+      in vec2 v_textureCoordinates;
+      void main() {
+        vec2 uv = v_textureCoordinates;
+        // barrel distortion
+        vec2 d = uv - 0.5;
+        float r2 = dot(d,d);
+        uv += d * r2 * 0.10;
+        // chromatic aberration
+        float ab = 0.0012;
+        float rv = texture(colorTexture, uv + vec2(ab, 0.0)).r;
+        float gv = texture(colorTexture, uv).g;
+        float bv = texture(colorTexture, uv - vec2(ab, 0.0)).b;
+        // scan lines
+        float sl = 1.0 - mod(floor(v_textureCoordinates.y * 700.0), 2.0) * 0.18;
+        // vignette
+        vec2 vd = v_textureCoordinates - 0.5;
+        float vig = clamp(1.0 - dot(vd*1.9, vd*1.9), 0.0, 1.0);
+        vec3 col = vec3(rv, gv, bv) * sl * vig;
+        col *= vec3(0.88, 1.08, 0.88); // phosphor tint
+        out_FragColor = vec4(col, 1.0);
+      }`
+  });
+
+  // Anime Cel-Shading
+  postProcs.anime = new Cesium.PostProcessStage({
+    name: 'wv_anime',
+    fragmentShader: `
+      uniform sampler2D colorTexture;
+      in vec2 v_textureCoordinates;
+      void main() {
+        vec4 c = texture(colorTexture, v_textureCoordinates);
+        float lv = 5.0;
+        vec3 cel = floor(c.rgb * lv + 0.5) / lv;
+        // boost saturation
+        float lum = dot(cel, vec3(0.299, 0.587, 0.114));
+        cel = mix(vec3(lum), cel, 2.3);
+        // warm grade
+        cel *= vec3(1.06, 1.01, 0.94);
+        cel = clamp(cel, 0.0, 1.0);
+        out_FragColor = vec4(cel, c.a);
+      }`
+  });
+}
+
+// ─── Mode switching ───────────────────────────────────────────────────────────
+const MODE_META = {
+  normal: { label: 'NORMAL',       color: '#00ff41', nvgVig: false },
+  nvg:    { label: 'NIGHT VISION', color: '#39ff14', nvgVig: true  },
+  flir:   { label: 'FLIR THERMAL', color: '#ff7700', nvgVig: false },
+  crt:    { label: 'CRT DISPLAY',  color: '#b8ffb8', nvgVig: false },
+  anime:  { label: 'ANIME MODE',   color: '#ff88ff', nvgVig: false }
+};
+
+function setMode(mode) {
+  // Remove all active stages
+  Object.values(postProcs).forEach(stage => {
+    try { if (viewer.scene.postProcessStages.contains(stage)) viewer.scene.postProcessStages.remove(stage); }
+    catch (_) {}
+  });
+
+  // Update buttons
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.remove('active'));
+  const modeBtn = document.querySelector(`.mbtn-${mode}`);
+  if (modeBtn) modeBtn.classList.add('active');
+
+  // Apply shader
+  if (mode !== 'normal' && postProcs[mode]) {
+    viewer.scene.postProcessStages.add(postProcs[mode]);
+  }
+
+  // NVG vignette
+  document.getElementById('nvg-vignette').style.opacity = MODE_META[mode]?.nvgVig ? '1' : '0';
+
+  // Flash label
+  const meta = MODE_META[mode] || MODE_META.normal;
+  const flash = document.getElementById('mode-flash');
+  flash.textContent = meta.label;
+  flash.style.color = meta.color;
+  flash.classList.add('show');
+  if (modeFlashTimer) clearTimeout(modeFlashTimer);
+  modeFlashTimer = setTimeout(() => flash.classList.remove('show'), 2200);
+
+  document.getElementById('st-mode').textContent = meta.label;
+  currentMode = mode;
+}
+
+// ─── God Mode ─────────────────────────────────────────────────────────────────
+function toggleGodMode() {
+  godMode = !godMode;
+  const btn = document.getElementById('god-btn');
+  btn.classList.toggle('active', godMode);
+
+  sats.forEach(s => {
+    if (!s.entity) return;
+    const isSel = s.id === selSat;
+    s.entity.label.show = godMode || isSel;
+    s.entity.point.pixelSize = isSel ? 10 : (godMode ? 6 : 4);
+  });
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-sats').style.display = tab === 'sats' ? '' : 'none';
+  document.getElementById('tab-acft').style.display = tab === 'acft' ? '' : 'none';
+}
+
+// ─── Clock ────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const hh = String(now.getUTCHours()).padStart(2, '0');
+  const mm = String(now.getUTCMinutes()).padStart(2, '0');
+  const ss = String(now.getUTCSeconds()).padStart(2, '0');
+  document.getElementById('utc').textContent = `UTC ${hh}:${mm}:${ss}`;
+}
+
+// ─── Camera status ────────────────────────────────────────────────────────────
+function updateCamStatus() {
+  try {
+    const cart = viewer.camera.positionCartographic;
+    document.getElementById('st-lat').textContent = Cesium.Math.toDegrees(cart.latitude).toFixed(1) + '°';
+    document.getElementById('st-lon').textContent = Cesium.Math.toDegrees(cart.longitude).toFixed(1) + '°';
+    document.getElementById('st-alt').textContent = (cart.height / 1000).toFixed(0) + 'km';
+  } catch (_) {}
+}
+
+// ─── Kick off ─────────────────────────────────────────────────────────────────
+init().catch(e => {
+  document.getElementById('loading-msg').textContent = 'ERROR: ' + e.message;
+  console.error(e);
+});
+</script>
+</body>
+</html>
